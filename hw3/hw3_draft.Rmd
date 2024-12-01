@@ -1,0 +1,353 @@
+---
+title: "Untitled"
+
+date: "2024-11-30"
+
+output: 
+  html_document:
+    code_download: yes
+---
+
+```{r}
+#install.packages("aod")
+#install.packages("ggplot2")
+#install.packages("rms")
+#install.packages("gmodels")
+#install.packages("nnet")
+#install.packages("DAAG")
+#install.packages("ROCR")
+#install.packages("xtable")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(aod)
+library(ggplot2)
+library(rms)
+library(gmodels)
+library(nnet)
+library(DAAG)
+library(ROCR)
+library(xtable)
+
+setwd("/Users/59239/Desktop/hw3")
+```
+
+```{r}
+mydata <-read.csv("/Users/59239/Desktop/hw3/Logistic Regression Data (1).csv")
+head(mydata)
+```
+
+# 2
+## a.
+```{r}
+DRINKING_D.tab <- table(mydata$DRINKING_D) 
+prop.table(DRINKING_D.tab) 
+```
+
+## b.
+
+
+```{r}
+#fit.binary = (fit>=0.5)
+CrossTable(mydata$DRINKING_D, mydata$FATAL_OR_M, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+CrossTable(mydata$DRINKING_D,  mydata$OVERTURNED, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+CrossTable(mydata$DRINKING_D, mydata$CELL_PHONE, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+CrossTable(mydata$DRINKING_D, mydata$SPEEDING, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+CrossTable(mydata$DRINKING_D, mydata$AGGRESSIVE, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+CrossTable(mydata$DRINKING_D, mydata$DRIVER1617, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+CrossTable(mydata$DRINKING_D, mydata$DRIVER65PLUS, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+
+```
+```{r}
+
+
+# Create an empty list to store the results
+results_list <- list()
+
+# Cross-tabulation for each predictor variable with DRINKING_D
+results_list$FATAL_OR_M <- CrossTable(mydata$FATAL_OR_M, mydata$DRINKING_D, prop.chisq = FALSE, chisq=TRUE, digits = 2, format = "SPSS")$t
+results_list$OVERTURNED <- CrossTable( mydata$OVERTURNED, mydata$DRINKING_D,prop.chisq = FALSE, chisq=TRUE, digits = 2, format = "SPSS")$t
+results_list$CELL_PHONE <- CrossTable(mydata$CELL_PHONE, mydata$DRINKING_D,  prop.chisq = FALSE, chisq=TRUE, digits = 2, format = "SPSS")$t
+results_list$SPEEDING <- CrossTable( mydata$SPEEDING, mydata$DRINKING_D, prop.chisq = FALSE, chisq=TRUE,digits = 2, format = "SPSS")$t
+results_list$AGGRESSIVE <- CrossTable(mydata$AGGRESSIVE, mydata$DRINKING_D, prop.chisq = FALSE, chisq=TRUE, digits = 2, format = "SPSS")$t
+results_list$DRIVER1617 <- CrossTable(mydata$DRIVER1617, mydata$DRINKING_D, prop.chisq = FALSE, chisq=TRUE, digits = 2, format = "SPSS")$t
+results_list$DRIVER65PLUS <- CrossTable(mydata$DRIVER65PLUS, mydata$DRINKING_D,  prop.chisq = FALSE, chisq=TRUE, digits = 2, format = "SPSS")$t
+
+# Combine all results into one data frame
+combined_results <- do.call(cbind, results_list)
+
+# Convert combined results to a data frame
+combined_results_df <- as.data.frame(combined_results)
+
+# Display the table
+library(knitr)
+kable(combined_results_df, format = "html", caption = "Cross-tabulations between DRINKING_D and Predictor Variables")
+
+
+```
+
+FATAL_OR_M: Crash resulted in fatality or major injury (1 = Yes, 0 = No) 
+
+In the table, note that the percentages (e.g., 2.90% and 7.60%) 
+should not add up to 100%. This is not an error. Basically, you're 
+asked to specify what % of accidents involving drunk drivers had 
+fatalities/major injuries, and what % of accidents NOT involving 
+drunk drivers had fatalities/major injuries. If you look at the first 
+row of the table, it says that 1181 accidents not involving drunk 
+driving (which represents 2.90% of all accidents that don't involve 
+drunk driving) had a fatality/major injury. On the other hand, 188 
+accidents involving drunk driving (which is 7.60% of all accidents 
+involving drunk driving) had a fatality/major injury.  
+
+
+### chi-square = true
+The χ2 results will appear below the cross-tabulation table that you have seen in 2.b.i above. 
+Report the results without the Yates Continuity Correction
+```{r}
+CrossTable(mydata$FATAL_OR_M, mydata$DRINKING_D, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE, chisq=TRUE)
+```
+
+
+
+
+
+## c. 
+
+calculate the average values of the variable PCTBACHMOR for crashes that involve drunk drivers and crashes that don’t
+
+calculate the standard deviations of the variable PCTBACHMOR for crashes that involve drunk drivers and crashes that don’t
+```{r}
+tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, mean)
+#calculate the average values of the variable PCTBACHMOR for crashes that involve drunk drivers and crashes that don’t
+
+tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, sd)
+#calculate the standard deviations of the variable PCTBACHMOR for crashes that involve drunk drivers and crashes that don’t
+
+```
+```{r}
+tapply(mydata$MEDHHINC,mydata$DRINKING_D, mean)     
+#calculate the average values of the variable PCTBACHMOR for crashes that involve drunk drivers and crashes that don’t
+
+tapply(mydata$MEDHHINC,mydata$DRINKING_D, sd)
+#calculate the standard deviations of the variable PCTBACHMOR for crashes that involve drunk drivers and crashes that don’t
+```
+
+
+```{r}
+# Calculate the mean of PCTBACHMOR for each level of DRINKING_D
+mean_values <- tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, mean)
+
+# Calculate the standard deviation of PCTBACHMOR for each level of DRINKING_D
+sd_values <- tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, sd)
+
+# Combine the results into a data frame
+results_table <- data.frame(
+  DRINKING_D = c("No Drunk Driver (0)", "Drunk Driver (1)"),
+  Mean_PCTBACHMOR = mean_values,
+  SD_PCTBACHMOR = sd_values
+)
+
+# Display the table using kable
+library(knitr)
+kable(results_table, format = "html", caption = "Mean and Standard Deviation of PCTBACHMOR by DRINKING_D")
+
+```
+
+
+```{r}
+# Calculate the mean of PCTBACHMOR for each level of DRINKING_D
+mean_values <- tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, mean)
+
+# Calculate the standard deviation of PCTBACHMOR for each level of DRINKING_D
+sd_values <- tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, sd)
+
+# Combine the results into a data frame
+results_table <- data.frame(
+  "No Drunk Driver (0)" = c(mean_values[1], sd_values[1]),
+  "Drunk Driver (1)" = c(mean_values[2], sd_values[2])
+)
+
+# Add row names to label Mean and SD
+rownames(results_table) <- c("Mean_PCTBACHMOR", "SD_PCTBACHMOR")
+
+# Display the table using kable
+library(knitr)
+kable(results_table, format = "html", caption = "Mean and Standard Deviation of PCTBACHMOR by DRINKING_D")
+
+```
+```{r}
+ 
+t.test(mydata$PCTBACHMOR~mydata$DRINKING_D)
+#t-test for pctbachmor
+
+ 
+t.test(mydata$MEDHHINC ~ mydata$DRINKING_D)
+##t-test for MEDHHINC
+
+```
+```{r}
+# Calculate the mean of PCTBACHMOR for each level of DRINKING_D
+mean_values <- tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, mean)
+
+# Calculate the standard deviation of PCTBACHMOR for each level of DRINKING_D
+sd_values <- tapply(mydata$PCTBACHMOR, mydata$DRINKING_D, sd)
+
+# Perform t-tests for PCTBACHMOR and MEDHHINC
+t_test_pctbachmor <- t.test(mydata$PCTBACHMOR ~ mydata$DRINKING_D)$p.value
+t_test_medhhinc <- t.test(mydata$MEDHHINC ~ mydata$DRINKING_D)$p.value
+
+# Combine the results into a data frame
+results_table <- data.frame(
+  "No Drunk Driver (0)" = c(mean_values[1], sd_values[1], t_test_pctbachmor),
+  "Drunk Driver (1)" = c(mean_values[2], sd_values[2], t_test_pctbachmor),
+  "T-test (PCTBACHMOR)" = c(NA, NA, t_test_pctbachmor),
+  "T-test (MEDHHINC)" = c(NA, NA, t_test_medhhinc)
+)
+
+# Add row names to label Mean, SD, and t-test results
+rownames(results_table) <- c("Mean_PCTBACHMOR", "SD_PCTBACHMOR", "T-test P-value")
+
+# Display the table using kable
+library(knitr)
+kable(results_table, format = "html", caption = "Mean, Standard Deviation, and T-test Results for PCTBACHMOR and MEDHHINC by DRINKING_D")
+
+```
+
+##d. 
+examine the Pearson correlations between all the predictors (both binary and continuous)
+```{r}
+cor.test(mydata$MEDHHINC, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$PCTBACHMOR, mydata$DRINKING_D, method = ("pearson"))
+
+```
+
+```{r}
+cor.test(mydata$MEDHHINC, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$PCTBACHMOR, mydata$DRINKING_D, method = ("pearson"))
+```
+
+```{r}
+cor.test(mydata$FATAL_OR_M, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$OVERTURNED, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$CELL_PHONE, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$SPEEDING, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$AGGRESSIVE, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$DRIVER1617, mydata$DRINKING_D, method = ("pearson"))
+cor.test(mydata$DRIVER65PLUS, mydata$DRINKING_D, method = ("pearson"))
+
+
+```
+
+# 3)
+
+
+```{r}
+summary(mydata$FATAL_OR_M)
+
+```
+##1. let's run a simple logistic regression (i.e., logistic regression with 1 predictor)
+
+```{r warning=FALSE, message=FALSE, cache=FALSE}
+mylogit <- glm(DRINKING_D ~   
+                 FATAL_OR_M + OVERTURNED + CELL_PHONE + SPEEDING + AGGRESSIVE + DRIVER1617 +
+                 DRIVER65PLUS + PCTBACHMOR + MEDHHINC,  
+               data = mydata, family = "binomial") #Run a logit model
+
+summary(mylogit)
+```
+
+ When we look at the results, we see that both the intercept and the predictor (FATAL_OR_M) are significant. The estimated value of $\beta_0$, or the intercept, is -2.84970, and can be interpreted as the log odds of there being a Drinking driver indicator in a CRM(carsh record number) where Crash resulted in fatality or major injury is 0. 
+ 
+Exponentiating these log odds gives us the odds of there being a Drinking driver in a carsh record number where the population is 0, which are calculated to be e-2.84970 = 0.05786186  
+
+ If we look at $\beta_1$, or the coefficient of the Crash resulted in fatality or major injury predictor, we see that it is 1.01202. Said differently, as the Crash resulted in fatality or major injury increases by 1 unit (i.e., 1 person), the log odds of there being a driking  goes up by 1.01202. We can convert the log odds to odds by exponentiating $\beta_1$, which gives us 1.01202 = 1.001358. In other words, as the FATAL_OR_M  goes up by 1 person, the odds of there being a drinking driver in a go up by a factor of 2.75115832.
+
+```{r warning=FALSE, message=FALSE, cache=FALSE}
+OR <- exp(coefficients(mylogit))  #odds ratio (exponentiated coefficients)
+OR
+```
+##2.
+
+We can also calculate the 95% confidence intervals for the beta coefficients,
+and exponentiate them to get the 95% confidence intervals for the odds ratios:
+
+```{r warning=FALSE, message=FALSE, cache=FALSE}
+confint.default(mylogit)  #95% confidence intervals
+
+exp(cbind(OR = coef(mylogit), confint(mylogit)))  #Exponentiating coefficients and 95% confidence intervals{r warning=FALSE, message=FALSE, cache=FALSE}
+```
+
+
+
+## 3. Sensitivity, Specificity and Misclassification Rates
+
+
+```{r warning=FALSE, message=FALSE, cache=FALSE}
+fit <- mylogit$fitted       #Getting the y-hats (i.e., predicted values)
+hist(fit)       #Histogram of fitted values
+
+```
+Now, let's do a cross-tabulation between the actual values of our dependent variable, DRINKING_D, and fit.binary.
+```{r}
+fit.binary = (fit>=0.5)
+CrossTable(fit.binary, mydata$DRINKING_D, prop.r=FALSE, prop.t=FALSE, prop.chisq=FALSE)
+```
+$$ Sensitivity = \frac{4}{4+2485} = \frac{4}{2485} = .81 $$ 
+$$ Specificity = \frac{40875}{40875+4} = \frac{40875}{40879} = .88 $$ 
+$$ Correct \; Classification \; Rate = \frac{40875+4}{43364} = \frac{253}{300} = .84 $$ 
+$$ Misclassification \; Rate = 1 - Correct \; Classification \; Rate = 1-\frac{40875+4}{43364}=\frac{2481+4}{43364} = .16$$
+
+## 4. ROC
+```{r}
+a <- cbind(mydata$DRINKING_D, fit)
+head(a)
+```
+
+```{r}
+colnames(a) <- c("labels","predictions")
+head(a)
+roc <- as.data.frame(a)
+```
+
+```{r}
+colnames(a) <- c("labels","predictions")
+head(a)
+roc <- as.data.frame(a)
+```
+```{r}
+pred <- prediction(roc$predictions, roc$labels)
+
+roc.perf = performance(pred, measure = "tpr", x.measure="fpr")
+plot(roc.perf)
+abline(a=0,b=1)
+```
+
+## b Re-run the model without the PCTBACHMOR and MEDHHINC terms.
+
+```{r}
+mylogit_1 <- glm(DRINKING_D ~   
+                 FATAL_OR_M + OVERTURNED + CELL_PHONE + SPEEDING + AGGRESSIVE + DRIVER1617 +
+                 DRIVER65PLUS ,  
+               data = mydata, family = "binomial") #Run a logit model
+
+summary(mylogit_1)
+```
+```{r}
+OR_1 <- exp(coefficients(mylogit_1))  #odds ratio (exponentiated coefficients)
+OR_1
+```
+
+
+We can also calculate the 95% confidence intervals for the beta coefficients,
+and exponentiate them to get the 95% confidence intervals for the odds ratios:
+
+```{r warning=FALSE, message=FALSE, cache=FALSE}
+confint.default(mylogit_1)  #95% confidence intervals
+
+exp(cbind(OR = coef(mylogit_1), confint(mylogit_1)))  #Exponentiating coefficients and 95% confidence intervals{r warning=FALSE, message=FALSE, cache=FALSE}
+```
+```{r}
+AIC(mylogit, mylogit_1)
+```
+ Here, recall that lower values of the AIC correspond to a better model.
