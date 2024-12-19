@@ -1,0 +1,655 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-10-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(stargazer)
+library(rgdal)
+library(patchwork)
+library(MASS)
+
+library(tidyverse)
+library(tidycensus)
+library(ggplot2)
+library(sf)
+library(spdep)
+library(caret)
+library(ckanr)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(ggcorrplot) # plot correlation plot
+library(corrr)      # another way to plot correlation plot
+library(kableExtra)
+library(jtools)     # for regression model plots
+library(ggstance) # to support jtools plots
+library(ggpubr)    # plotting R^2 value on ggplot point scatter
+library(broom.mixed) # needed for effects plots
+library(pander)
+setwd("/Users/jiatong/Desktop/Lecture 1 - RegressionData/")
+PhillyData_1 <- st_read("RegressionData.shp")
+
+```
+
+#1) Import the file RegressionData.csv into R using the read.csv command. \## i. Using the results you obtain, present the summary statistics (i.e., mean and standard deviation) of each of the variables in a table, such as the one below.
+
+```{r cars}
+regression_data <- read.csv("RegressionData.csv")
+
+data_1 <- regression_data %>%
+  dplyr::select(MEDHVAL, NBELPOV100, PCTBACHMOR, PCTVACANT, PCTSINGLES) %>% 
+  rename(
+    MedianHouseValue = MEDHVAL,
+    PctBachMore = PCTBACHMOR,
+    PctVacant = PCTVACANT,
+    PctSingles = PCTSINGLES,
+    NBELPOV100 = NBELPOV100
+  )
+
+
+
+# Calculate mean and standard deviation for selected columns
+summary_stats <- data_1 %>%
+  summarise(across(everything(), list(mean = mean, sd = sd), na.rm = TRUE))
+
+summary_stats_long <- summary_stats %>%
+  pivot_longer(cols = everything(), names_to = c("Variable", "Statistic"), names_sep = "_")
+
+
+# Display the table with kable
+kable(summary_stats_long, col.names = c("Variable", "Statistic", "Value"), 
+      caption = "Mean and Standard Deviation of Selected Variables")
+
+
+# Display the table with kable and enhanced formatting
+kable(summary_stats_long, col.names = c("Variable", "Statistic", "Value"), 
+      caption = "Mean and Standard Deviation of Selected Variables", 
+      format = "html", 
+      table.attr = "style='width:60%; background-color:#f0f0ff; border: 1px solid #d3d3d3;'") %>%
+  kable_styling(full_width = F, position = "center", bootstrap_options = c("striped", "hover"))
+
+
+
+```
+
+```{r}
+# Calculate mean and standard deviation for selected columns
+summary_stats <- data_1 %>%
+  summarise(across(everything(), list(mean = mean, sd = sd), na.rm = TRUE))
+
+# Reshape to a long format with separate columns for mean and sd
+summary_stats_long <- summary_stats %>%
+  pivot_longer(cols = everything(), names_to = c("Variable", ".value"), names_sep = "_") 
+
+# Round the values for better readability
+summary_stats_long <- summary_stats_long %>%
+  mutate(across(mean:sd, round, 2)) # Round to 2 decimal places
+
+# Display the table with kable and enhanced formatting
+kable(summary_stats_long, col.names = c("Variable", "Mean", "Standard Deviation"), 
+      caption = "Table 1: Mean and Standard Deviation of Selected Variables", 
+      format = "html", 
+      table.attr = "style='width:60%; background-color:#f0f0ff; border: 1px solid #d3d3d3;'") %>%
+  kable_styling(full_width = F, position = "center", bootstrap_options = c("striped", "hover"))
+
+```
+
+```{r}
+# Create rows for dependent and independent variables
+dependent_row <- data.frame(Variable = "Median House Value", Mean = NA, `Standard Deviation` = NA)
+independent_row <- data.frame(Variable = "Independent Variables", Mean = NA, `Standard Deviation` = NA)
+
+# Combine the rows with the summary statistics
+summary_stats_long <- bind_rows(dependent_row, independent_row, summary_stats_long)
+
+# Display the table with kable and enhanced formatting
+kable(summary_stats_long, col.names = c("Variable", "Mean", "Standard Deviation"), 
+      caption = "Table 1: Mean and Standard Deviation of Selected Variables", 
+      format = "html", 
+      table.attr = 
+        "style='width:60%; background-color:#f0f0ff; border: 1px solid #d3d3d3;'") %>%
+  kable_styling(full_width = F, position = "center", bootstrap_options = c("striped", "hover"))
+
+```
+
+## ii. Also, observe from the histograms that none of the variables looks normal
+
+### a. Remember: If the variable has any zero values, use the log(1+[VAR]) transformation instead of the log([VAR]) transformation.
+
+```{r}
+
+reg_data <- regression_data %>% 
+  
+  mutate(
+    LNMEDHVAL = log(1+MEDHVAL),
+    LNPCBACHMORE = log(1+PCTBACHMOR),
+    LNNBELPOV100 = log(1+NBELPOV100),
+    LNPCTVACANT = log(1+PCTVACANT),
+    LNPCTSINGLES = log(1+PCTSINGLES)
+    
+  )
+
+#names(reg_data)
+```
+
+### b. In your report, you will be asked to present histograms of the original and transformed variables
+
+```{r}
+reg_data %>%
+  pivot_longer(cols = c("MEDHVAL", "PCTBACHMOR", "NBELPOV100", "PCTVACANT", "PCTSINGLES"),
+               names_to = "Variable",
+               values_to = "Value") %>% 
+  ggplot(aes(x = Value)) +
+  geom_histogram(aes(y = ..count..), fill = "red", alpha = 0.7) +  
+  facet_wrap(~Variable, scales = "free", ncol = 3, labeller = as_labeller(c(
+    "MEDHVAL" = "Median House Value",
+    "PCTBACHMOR" = "% with Bachelor’s Degrees or Higher",
+    "NBELPOV100" = "# Households Living in Poverty",
+    "PCTVACANT" = "% of Vacant Houses",
+    "PCTSINGLES" = "% of Single House Units"
+  ))) +  
+  labs(x = "Value", y = "Count", title = "Histograms of Dependent and Predictor Variables") +
+  theme_light() +   
+  theme(plot.subtitle = element_text(size = 9,face = "italic"),
+        plot.title = element_text(size = 12, face = "bold"), 
+        axis.text.x=element_text(size=6),
+        axis.text.y=element_text(size=6), 
+        axis.title=element_text(size=8))
+```
+
+```{r}
+# histograms of the logged variables
+reg_data %>%
+  pivot_longer(cols = c("LNMEDHVAL", "LNPCBACHMORE", "LNNBELPOV100", "LNPCTVACANT", "LNPCTSINGLES"),
+               names_to = "Variable",
+               values_to = "Value") %>% 
+  ggplot(aes(x = Value)) +
+  geom_histogram(aes(y = ..count..), fill = "red", alpha = 0.7) +  
+  facet_wrap(~Variable, scales = "free", ncol = 3, labeller = as_labeller(c(
+    "LNMEDHVAL" = "Median House Value",
+    "LNPCBACHMORE" = "% with Bachelor’s Degrees or Higher",
+    "LNNBELPOV100" = "# Households Living in Poverty",
+    "LNPCTVACANT" = "% of Vacant Houses",
+    "LNPCTSINGLES" = "% of Single House Units"
+  ))) +  
+  labs(x = "Value", y = "Count", title = "Histograms with Logged Transform Variables") +
+  theme_light() +   
+  theme(plot.subtitle = element_text(size = 9,face = "italic"),
+        plot.title = element_text(size = 12, face = "bold"), 
+        axis.text.x=element_text(size=6),
+        axis.text.y=element_text(size=6), 
+        axis.title=element_text(size=8))
+
+```
+
+```{r}
+
+# Reshape data to long format
+reg_data %>%
+  dplyr::select(MEDHVAL, PCTBACHMOR, NBELPOV100, PCTVACANT, PCTSINGLES) %>%
+  gather(Variable, Value) %>% 
+  ggplot(aes(x = Value)) +
+  geom_histogram(aes(y = ..count..), fill = "red", alpha = 0.7) +  
+  #stat_cor(label.y = 2000000) +
+  theme_light() +   
+     facet_wrap(~Variable, scales = "free", ncol = 3) +
+     labs(title = "Histograms of Dependent and Predictor Variables") +
+     theme_minimal()
+
+```
+
+```{r}
+names(reg_data)
+```
+
+```{r}
+reg_data %>%
+  dplyr::select(LNMEDHVAL, LNPCBACHMORE ,LNNBELPOV100 , LNPCTVACANT, LNPCTSINGLES) %>%
+  gather(Variable, Value) %>% 
+  ggplot(aes(x = Value)) +
+  geom_histogram(aes(y = ..count..), fill = "red", alpha = 0.7) +  
+  #stat_cor(label.y = 2000000) +
+  theme_light() +   
+     facet_wrap(~Variable, scales = "free", ncol = 3,
+                 labeller = as_labeller(c(
+    "LNMEDHVAL"= "Median House Value",
+    "LNPCBACHMORE" = "% with Bachelor’s Degrees or Higher",
+    "LNNBELPOV100" = "Households Living in Poverty",
+    "LNPCTVACANT" = "% of Vacant Houses",
+    "LNPCTSINGLES" = "% of Single House Units"))) +
+     labs(title = "Histograms with Logged Transform Variables") +
+     theme_minimal()
+
+```
+
+### c. Look at whether the relationship between the dependent variable and each of the predictors is linear.
+
+```{r}
+reg_data %>%
+   dplyr::select( LNMEDHVAL, PCTBACHMOR ,LNNBELPOV100 , PCTVACANT, PCTSINGLES) %>%
+  gather(Variable, Value, -LNMEDHVAL) %>% 
+   ggplot(aes(Value, LNMEDHVAL)) +
+     geom_point(size = .3, color = "darkblue", alpha = 0.7) + 
+  stat_cor(label.y = 15) +
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free") +
+   
+     theme_light() +
+       labs(title = "Median House Value(log) as a function of continuous variables") 
+
+```
+
+```{r}
+reg_data %>%
+  dplyr::select(MEDHVAL, PCTBACHMOR, NBELPOV100, PCTVACANT, PCTSINGLES) %>%
+  gather(Variable, Value, -MEDHVAL) %>% 
+   ggplot(aes(Value, MEDHVAL)) +
+  geom_point(color = "darkblue", alpha = 0.7, size = 0.4) +
+  stat_cor(label.y = 550000) +
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+     facet_wrap(~Variable, ncol = 3, scales = "free",
+                labeller = as_labeller(c(
+    "PCTBACHMOR" = "% with Bachelor’s Degrees or Higher",
+    "NBELPOV100" = "Households Living in Poverty",
+    "PCTVACANT" = "% of Vacant Houses",
+    "PCTSINGLES" = "% of Single House Units"))) +
+        theme_light() +   
+     labs(title = "MEDHVAL as a function of continuous variables") 
+```
+
+### d. Look at the Pearson correlations between all the predictors you will be including in your model, listed below.
+
+```{r}
+# Calculate Pearson correlation coefficients
+correlations <- reg_data %>%
+  summarise(
+    Correlation_BachMore = cor(MEDHVAL, LNPCBACHMORE, use = "complete.obs"),
+    Correlation_HouseholdsPoverty = cor(MEDHVAL, LNNBELPOV100, use = "complete.obs"),
+    Correlation_VacantHouses = cor(MEDHVAL, LNPCTVACANT, use = "complete.obs"),
+    Correlation_SingleUnits = cor(MEDHVAL, LNPCTSINGLES, use = "complete.obs")
+  )
+
+# Display the results
+print(correlations)
+
+```
+
+```{r}
+library(ggplot2)
+library(reshape2)
+# Melt the correlation data for visualization
+correlations_melted <- melt(correlations)
+
+# Create a bar plot for correlations
+ggplot(correlations_melted, aes(x = variable, y = value)) +
+  geom_bar(stat = "identity", fill = "#283d3b", alpha = 0.7) +
+  labs(x = "Variables", y = "Pearson Correlation Coefficient", title = "Pearson Correlation with Median House Value") +
+  theme_light() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 12, face = "bold"))
+```
+
+```{r}
+cor.test(reg_data$MEDHHINC, reg_data$PCTVACANT, method=("pearson"))
+```
+
+```{r}
+varibles <- 
+  reg_data %>% 
+  dplyr::select(PCTVACANT, PCTSINGLES, PCTBACHMOR, LNNBELPOV100) %>% na.omit()
+
+round(cor(varibles), 1)
+
+```
+
+```{r}
+
+
+ ggcorrplot(
+  round(cor(varibles), 1), 
+  p.mat = cor_pmat(varibles),
+  colors = c("#25CB10", "white", "#FA7800"),
+  lab = TRUE, 
+  lab_size = 3,
+  type="lower",
+  insig = "blank") +  
+    labs(title = "Correlation across numeric variables")
+```
+
+### e.create choropleth maps of the following variable
+
+```{r}
+PhillyData <- readOGR(dsn = "RegressionData.shp")
+
+PhillyData_1 <- st_read("RegressionData.shp")
+names(PhillyData_1)
+```
+
+```{r}
+reg_data_1 <- PhillyData_1 %>% 
+  
+  mutate(
+    LNMEDHVAL = log(1+MEDHVAL),
+    LNPCBACHMORE = log(1+PCTBACHMOR),
+    LNNBelPov100 = log(1+NBelPov100),
+    LNPCTVACANT = log(1+PCTVACANT),
+    LNPCTSINGLES = log(1+PCTSINGLES)
+  )
+```
+
+```{r}
+ggplot(data = PhillyData_1) +
+  geom_sf(aes(fill = LNMEDHVAL), color = 'transparent') +
+      scale_fill_viridis_c(option = "viridis", na.value = "grey50") + 
+  ggtitle("Loggged transform Median House value") +
+  labs( fill = " logged Median House value") +
+   theme_void()
+
+```
+
+```{r}
+
+map_vacant <- ggplot(data = PhillyData_1) +
+  geom_sf(aes(fill = PCTVACANT), color = 'transparent') +
+      scale_fill_viridis_c(option = "viridis", na.value = "grey50") + 
+  ggtitle("% Vacant Houses") +
+  labs(fill = "PCTVACANT") +
+   theme_void() +
+  theme(
+    panel.border = element_rect(colour = "grey", fill = NA, size = 0.8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5, size = 10),  # Smaller title
+
+)
+
+map_singles <- ggplot(data = PhillyData_1) +
+  geom_sf(aes(fill = PCTSINGLES), color = 'transparent') +
+      scale_fill_viridis_c(option = "viridis", na.value = "grey50") + 
+  ggtitle("% Single House Units") +
+  labs(fill = "PCTSINGLES") +
+   theme_void() +
+  theme(
+    panel.border = element_rect(colour = "grey", fill = NA, size = 0.8),
+    legend.title = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5, size = 10),  # Smaller title
+
+)
+
+map_bachmor <- ggplot(data = PhillyData_1) +
+  geom_sf(aes(fill = PCTBACHMOR), color = 'transparent') +
+      scale_fill_viridis_c(option = "viridis", na.value = "grey50") + 
+  ggtitle("% Bachelor's Degree or Higher") +
+  labs( fill = "PCTBACHMOR") +
+   theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 10),  # Smaller title
+    panel.border = element_rect(colour = "grey", fill = NA, size = 0.8),
+    legend.title = element_text(size = 8)
+)
+   
+
+map_pov100 <- ggplot(data = PhillyData_1) +
+  geom_sf(aes(fill = LNNBELPOV), color = 'transparent') +
+      scale_fill_viridis_c(option = "viridis", na.value = "grey50") + 
+  ggtitle("Logged Transformed Poverty") +
+  labs( fill = "LNNBELPOV") +
+   theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 10),  # Smaller title
+    panel.border = element_rect(colour = "grey", fill = NA, size = 0.8),
+    legend.title = element_text(size = 8)
+)
+
+map_vacant + map_singles + map_bachmor + map_pov100 + 
+  plot_layout(ncol = 2)
+
+
+```
+
+# 2. when you work with data, you need to make sure that you examine the variables for outliers and incorrectly coded/entered values. But now, you’re ready for regression analysis.
+
+## a. use the `lm` command to run the regression where LNMEDHVAL is the dependent variable and PCTVACANT, PCTSINGLES, PCTBACHMOR, and LNNBELPOV100 are predictors.
+
+```{r}
+# Assuming reg_data is your data frame containing the variables
+# Run the linear regression
+model <- lm( LNMEDHVAL ~ PCTVACANT + PCTSINGLES + PCTBACHMOR + LNNBELPOV, data = PhillyData_1)
+
+# Display the summary of the regression model
+summary(model)
+
+```
+
+The regression equation is:
+
+$$
+\text{LNMEDHVAL} = 11.114 - 0.019X + 0.003X + 0.021X - 0.079X + \epsilon$$
+
+```{r}
+# Install stargazer if not already installed
+# install.packages("stargazer")
+
+# Load the stargazer package
+library(stargazer)
+
+# Example regression model
+# model <- lm(median_house_value ~ education + poverty + vacancy_rate + single_family_homes, data = data_1)
+
+# Create a fancy regression table
+stargazer(model, 
+          type = "text",                   # Use "text" for console output, or "html" for HTML output
+          title = "Table 1: OLS Regression Results", 
+          dep.var.labels = "Median House Value",
+          covariate.labels = c("the percentage of residents with a bachelor's degree or higher", "the Number of households with incomes below 100% poverty leve", "proportion of housing units that are vacant", "Proportion of Single-Family Homes"),
+          star.cutoffs = c(0.05, 0.01, 0.001), # Significance levels indicated by stars
+          omit.stat = c("f", "ser"),        # Omit some statistics (e.g., F-statistic, standard error of regression)
+          digits = 3)                       # Round to three decimal places
+
+```
+
+\# Regression Equation The regression equation is:
+
+\\[ \\text{log(1+MEDHVAL)} = 11.114\^{\*\*\*} - 0.019\^{\*\*\*}\\text{(Education Level)} + 0.003\^{\*\*\*}\\text{(Poverty Rate)} + 0.021\^{\*\*\*}\\text{(Vacancy Rate)} - 0.079\^{\*\*\*}\\text{(Proportion of Single-Family Homes)} \\]
+
+$$
+\LNMEDHVAL = 11.114^{***} - 0.019^{***}\text{(Education Level)} + 0.003^{***}\text{(Poverty Rate)} + 0.021^{***}\text{(Vacancy Rate)} - 0.079^{***}\text{(Proportion of Single-Family Homes)}
+$$
+
+```{r}
+# Install required packages if you haven't already
+# install.packages("broom")
+# install.packages("knitr")
+library(broom)
+library(knitr)
+
+# Run the linear regression
+regression_table <- lm(LNMEDHVAL ~ PCTVACANT + PCTSINGLES + PCTBACHMOR + LNNBELPOV, data = PhillyData_1)
+
+
+
+regression_table$p.value <- formatC(regression_table$p.value, format = "f", digits = 5)
+
+# Display the table with kable and p-values in higher precision
+kable(regression_table, digits = 3, col.names = c("Variable", "Coefficient", "Std. Error", "t-value", "p-value"),
+      caption = "OLS Regression Results with P-values (5 Decimal Points)") %>%
+  kable_styling(full_width = FALSE)
+
+
+```
+
+$$
+\text{LNMEDHVAL} = \beta_0 + \beta_1 \text{(PCTBACHMOR)} + \beta_2 \text{(LNNBELPOV)} + \beta_3 \text{PCTVACANT)} + \beta_4 \text{(PCTSINGLES)} + \epsilon
+$$
+
+
+
+$$
+y = \rho W y + X \beta + \epsilon
+$$
+$$
+\text{LNMEDHVAL} = \rho W y  + \beta_0 + \beta_1 \text{(PCTBACHMOR)} + \beta_2 \text{(LNNBELPOV)} + \beta_3 \text{PCTVACANT)} + \beta_4 \text{(PCTSINGLES)} + \epsilon
+$$
+
+$$
+\text{LNMEDHVAL} = \beta_0 + \beta_1 \text{(PCTBACHMOR)} + \beta_2 \text{(LNNBELPOV)} + \beta_3 \text{PCTVACANT)} + \beta_4 \text{(PCTSINGLES)}+\lambda W \epsilon + u
+$$
+
+```{r}
+\text{LNMEDHVAL} = \rho W y  + \beta_0 + \beta_1 \text{(PCTBACHMOR)} + \beta_2 \text{(LNNBELPOV)} + \beta_3 \text{PCTVACANT)} + \beta_4 \text{(PCTSINGLES)} + \epsilon
+
+```
+
+```{r}
+cat("
+\\begin{equation}
+\\text{Median House Value} = 11.114^{***} - 0.019^{***}\\text{(Education Level)} + 0.003^{***}\\text{(Poverty Rate)} + 0.021^{***}\\text{(Vacancy Rate)} - 0.079^{***}\\text{(Proportion of Single-Family Homes)}
+\\end{equation}
+")
+```
+
+## b. , be sure to present the summary of the fit as well as the ANOVA table containing the regression and error sum of squares (use the summary and anova commands).
+
+```{r}
+anova(model)
+```
+
+## c. Use the fitted, residuals and rstandard commands to save the predicted values, residuals and standardized residuals, respectively.
+
+```{r}
+PhillyData_1$resids <- residuals(model)
+PhillyData_1$predvals <- fitted(model)
+PhillyData_1$stdres <- rstandard(model)
+```
+
+## d. Create a scatter plot with Standardized Residuals on the y-axis and Predicted Values on the x-axis. You will be asked to present this scatter plot in your report, so take a screenshot of it if you plan to use MS Word.
+
+```{r}
+#plot(PhillyData$predvals, PhillyData$stdres)
+
+```
+
+```{r}
+ggplot(PhillyData_1, aes(x = predvals, y = stdres)) +
+  geom_point(color = "darkblue", alpha = 0.6) +    # Scatter plot points
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +   
+  # Add a horizontal line at y = 0
+  labs(
+    title = "Scatter Plot of Standardized Residuals vs Fitted Values",
+    x = "Fitted Values",
+    y = "Standardized Residuals"
+  ) +
+  theme_light()
+```
+
+# 3. step\$anova output
+
+```{r}
+stepwise_model <- step(model, direction = "both", trace = 0)  # 'trace = 0' suppresses detailed output
+#summary(stepwise_model)
+stepwise_anova <- stepwise_model$anova
+stepwise_anova
+```
+
+```{r}
+step <- stepAIC(model, direction="both")
+
+```
+
+```{r}
+step$anova
+
+```
+
+# 4.Perform k-fold cross-validation (in which k = 5) using the CVlm command in the DAAG library and calculate the root mean square error (RMSE).
+
+```{r}
+#number is the number of folds. Here, we have 5 folds
+train_control=caret::trainControl(method="cv", number=5)
+
+#only using PCTVACANT and MEDHHINC as predictors
+model_1 <- caret::train(LNMEDHVAL~ PCTVACANT + MEDHHINC , data=PhillyData_1, method="lm", trControl=train_control)
+
+print(model_1)
+```
+```{r}
+train_control=caret::trainControl(method="cv", number=5)
+
+#only using PCTVACANT and MEDHHINC as predictors
+model_2 <- caret::train(LNMEDHVAL~ PCTVACANT + PCTSINGLES + PCTBACHMOR + LNNBELPOV , data=PhillyData_1, method="lm", trControl=train_control)
+
+print(model_2)
+```
+
+$$
+\text{LNMEDHVAL} = \beta_0 + \beta_1 \text{(Education Level)} + \beta_2 \text{(Poverty Rate)} + \beta_3 \text{(Vacancy Rate)} + \beta_4 \text{(Proportion of Single-Family Homes)} + \epsilon
+$$
+
+
+
+# Regression Equation
+
+The regression equation is:
+
+\# Regression EquationThe regression equation with beta coefficients is as follows:
+
+# Regression Equation
+
+
+The regression equation with beta coefficients is as follows:
+
+\$\$
+
+\\text{Median House Value} = \\beta_0 + \\beta_1 \\text{(Education Level)} + \\beta_2 \\text{(Poverty Rate)} + \\beta_3 \\text{(Vacancy Rate)} + \\beta_4 \\text{(Proportion of Single-Family Homes)} + \\epsilon
+
+\$\$
+
+
+
+# 5. Finally, create a histogram and a choropleth map of standardized regression residuals that you saved using the rstandard command earlier. Use the same classification/color scheme as in your earlier maps.
+
+```{r}
+# Histogram of standardized residuals
+ggplot(PhillyData_1, aes(x = stdres)) +
+  geom_histogram(binwidth = 0.5, fill = "#283d3b", color = "black", alpha = 0.7) +
+  labs(
+    title = "Histogram of Standardized Regression Residuals",
+    x = "Standardized Residuals",
+    y = "Frequency"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = 0.5)
+  )
+
+```
+
+```{r}
+# Choropleth map of standardized residuals
+ggplot(PhillyData_1) +
+  geom_sf(aes(fill = stdres), color = "transparent", size = 0.1) +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey50") +  
+  # Adjust option if needed to match previous maps
+  labs(
+    title = "Choropleth Map of Standardized Regression Residuals",
+    fill = "Standardized Residuals"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, hjust = 0.5),
+    legend.position = "right"
+  )
+
+```
+
+The equation for the R-squared value is given by:
+
+$$
+R^2 = 1 - \frac{\sum (y_i - \hat{y}_i)^2}{\sum (y_i - \bar{y})^2}
+$$
+
+Where: - $y_i$ is the actual value of the dependent variable, - $\hat{y}_i$ is the predicted value of the dependent variable, - $\bar{y}$ is the mean of the actual values.
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

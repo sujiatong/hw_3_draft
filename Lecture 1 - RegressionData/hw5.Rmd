@@ -1,0 +1,129 @@
+---
+title: "hw5"
+output: html_document
+date: "2024-12-18"
+---
+
+```{r}
+
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("/Users/jiatong/Desktop/MUSA_5000/Lecture 1 - RegressionData")
+regression_data <- read.csv("RegressionData.csv")
+
+data_1 <- regression_data %>%
+  dplyr::select(MEDHVAL, PCTBACHMOR, PCTVACANT, PCTSINGLES) %>% 
+  rename(
+    MedianHouseValue = MEDHVAL,
+    PctBachMore = PCTBACHMOR,
+    PctVacant = PCTVACANT,
+    PctSingles = PCTSINGLES
+  )
+```
+
+An appropriate cluster solution could be defined as the solution at which the reduction in SSE slows dramatically. This produces an “elbow” in the plot of SSE against cluster solutions. The figure indicates that there is a distinct drop in within groups sum of squares when moving from 1 to 3 clusters. After three clusters, this decrease drops off, suggesting that a 3-cluster solution may be a good fit to the data.
+
+
+```{r setup, include=FALSE}
+wss <- (nrow(regression_data)-1)*sum(apply(regression_data,2,var))
+for (i in 2:20) wss[i] <- sum(kmeans(regression_data, 
+                                     centers=i)$withinss)
+plot(1:20, wss, type="b", xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
+
+
+```
+
+
+
+```{r cars}
+library(NbClust)
+
+set.seed(1234)
+nc <- NbClust(regression_data, min.nc=2, max.nc=15, method="kmeans", index="all")
+```
+
+```{r}
+table(nc$Best.n[1,])
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+par(mfrow=c(1,1)) 
+barplot(table(nc$Best.n[1,]),
+        xlab="Numer of Clusters", ylab="Number of Criteria",
+        main="Number of Clusters Chosen by 26 Criteria")
+```
+
+# Exploring the 3 Cluster Solution
+```{r}
+set.seed(1234)
+fit.km <- kmeans(regression_data, 3, nstart=25)
+#Let's look at the number of observations in each cluster
+fit.km$size
+```
+
+```{r}
+round(fit.km$centers, 2)
+
+```
+
+```{r}
+fit.km$cluster
+
+```
+
+```{r}
+cbind(round(aggregate(data_1[-2:-1], by=list(cluster=fit.km$cluster), mean),1),fit.km$size)
+
+```
+
+# Evaluating the Results
+```{r}
+length(regression_data$POLY_ID)
+length(fit.km$cluster)
+
+```
+
+```{r}
+ct.km <- table(regression_data$POLY_ID, fit.km$cluster)
+# Convert table to data frame
+ct.km_df <- as.data.frame(ct.km)
+colnames(ct.km_df) <- c("POLY_ID", "Cluster", "Frequency")
+
+# View the data frame
+print(ct.km_df)
+```
+
+```{r}
+#install.packages("flexclust")  # Install the mclust package
+library(mclust)
+
+library(flexclust)
+
+round(randIndex(ct.km),1)
+
+```
+
+# DATA
+```{r}
+library(sf)
+shp <- st_read("RegressionData.shp")
+data1 <- as.data.frame(shp)
+
+```
+
+```{r}
+library(dplyr)
+
+merged_data <- merge(data1, ct.km_df, by = "POLY_ID")
+
+st_write(merged_data, "merged_data.shp")
+
+```
+
+ˆ
